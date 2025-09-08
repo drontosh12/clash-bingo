@@ -1,0 +1,112 @@
+/* ===== TÉMATA ===== */
+.theme-light {
+  --bg:#f7f9fc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0;
+  --accent:#10b981; --accent-weak:#ecfdf5; --center:#fff7ed; --center-border:#fed7aa;
+}
+.theme-dark {
+  --bg:#0b1220; --card:#0f172a; --text:#e5e7eb; --muted:#94a3b8; --border:#1f2937;
+  --accent:#34d399; --accent-weak:#064e3b; --center:#1f2937; --center-border:#374151;
+}
+
+*{box-sizing:border-box}
+body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+
+/* stránka */
+.page{
+  width:100%;
+  min-height:100vh;
+  background:linear-gradient(to bottom,var(--bg),#0a0a0a10);
+  color:var(--text);
+  padding:14px 20px;
+}
+
+/* horní lišta */
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.title{margin:0;font-size:30px;font-weight:800;letter-spacing:-.02em}
+.subtitle{margin:6px 0 0;color:var(--muted);font-size:14px}
+.actions{display:flex;gap:8px}
+
+/* tlačítka – světlý bílá, tmavý světlá */
+.btn{padding:10px 14px;border-radius:10px;cursor:pointer;border:1px solid var(--border)}
+.theme-light .btn{background:#fff;color:#0f172a}
+.theme-dark .btn{background:#e5e7eb;color:#0f172a}
+.btn:hover{opacity:.95}
+.btn.ghost{background:transparent;color:var(--text)}
+
+/* karty / vstupy */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:12px;color:var(--text)}
+.controls .row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.control{display:flex;flex-direction:column;gap:6px}
+.control input[type="text"],.control select{
+  border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:transparent;color:var(--text)
+}
+.control select option{color:#000}
+
+/* ===== CENTROVÁNÍ ===== */
+.center{max-width:1480px;margin:0 auto}        /* centralizuje controls */
+.layout-wrapper{width:100%;display:flex;justify-content:center}
+.layout{
+  display:grid;
+  grid-template-columns: auto 360px;           /* mřížka + sidebar */
+  gap:16px;
+  max-width:1480px;                            /* pevná šířka kvůli centrování */
+  width:100%;
+  margin:12px auto 0;
+}
+
+/* mřížka – 1920×1080 bez scrollu */
+.grid-card{padding:14px}
+.grid{
+  --cell-size: 170px;                          /* klíčová hodnota pro FullHD */
+  display:grid;
+  grid-template-columns: repeat(5, var(--cell-size));
+  gap:12px;
+  justify-content:center;
+}
+
+/* buňky */
+.cell{
+  width:var(--cell-size);
+  aspect-ratio:1/1;
+  border:1px solid var(--border);
+  background:transparent;
+  border-radius:16px;
+  padding:10px;
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  text-align:center;font-size:15px;
+  cursor:pointer; color:var(--text);
+  transition:transform .05s,background .15s,border-color .15s;
+}
+.cell:hover{transform:scale(.995)}
+.cell.checked{background:var(--accent-weak);border-color:var(--accent)}
+.theme-dark .cell.checked{background:#064e3b66}
+.cell.center{font-weight:700;background:var(--center);border-color:var(--center-border);cursor:default}
+.cell .tick{position:absolute;top:8px;right:10px;font-weight:800;color:var(--accent)}
+.cell-text{color:var(--text);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;padding:0 6px}
+
+/* pravý panel */
+.sidebar h3{margin:0 0 8px}
+.stat{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:transparent;border:1px solid var(--border);border-radius:12px}
+.stat strong{font-size:20px}
+.buttons{display:flex;gap:8px;margin-top:8px}
+.mt{margin-top:12px}.muted{color:var(--muted);font-size:14px}
+.winners{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.winners li{background:transparent;border:1px solid var(--border);border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.pill{font-size:12px;padding:2px 8px;border-radius:999px;background:transparent;color:var(--muted);border:1px solid var(--border)}
+
+/* bingo overlay */
+.bingo-banner{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.45);z-index:50}
+.bingo-content{background:var(--card);border:2px solid var(--accent);border-radius:20px;padding:18px 22px;text-align:center}
+.bingo-title{font-size:34px;font-weight:900;color:var(--accent)}
+.bingo-sub{margin-top:6px;color:var(--muted)}
+
+.footer{margin:12px 0 6px;text-align:center;color:var(--muted);font-size:12px}
+
+/* responzivní fallbacky */
+@media (max-width: 1400px){ .grid{ --cell-size: 155px; } }
+@media (max-width: 1200px){ .grid{ --cell-size: 140px; } }
+@media (max-width: 1100px){
+  .layout{ grid-template-columns: 1fr; }
+  .grid{ --cell-size: 130px; }
+}
