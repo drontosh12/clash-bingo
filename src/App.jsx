@@ -11,7 +11,7 @@ const POOLS = {
     "Já tě sundám za xx vteřin!",
     "Kostým na scéně",
     "Na konci zavolá Tadeáš",
-    "Chtěl bych pozdravit Emdžího Titmana",
+    "Chtěl bych pozdravit MG Fitmana",
     "Ochranka musí zasáhnout",
     "Trapné ticho po urážce",
     "Já jsem tady hvězda!",
