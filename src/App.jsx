@@ -163,7 +163,7 @@ function makeBoard(pool, includeFree = true) {
     checked: false,
   }));
   if (includeFree) {
-    raw[12] = { ...raw[12], text: "FREE SPACE", checked: true, center: true };
+    raw[12] = { ...raw[12], text: "ŽOLÍK", checked: true, center: true };
   }
   return raw;
 }
