@@ -10,13 +10,15 @@ const POOLS = {
     "Vzduchem letí sklenička/piti",
     "Já tě sundám za xx vteřin!",
     "Kostým na scéně",
+    "Na konci zavolá Tadeáš",
+    "Chtěl bych pozdravit Emdžího Titmana"
     "Ochranka musí zasáhnout",
     "Trapné ticho po urážce",
     "Já jsem tady hvězda!",
     "Na konci zavolá někdo z místních fighterů",
     "Já jsem profík, ty nic!",
     "Osobní urážka rodiny",
-    "Někdo přijde pozdě na pódium",
+    "Někdo přijde pozdě",
     "Výzva na zápas mimo kartu",
     "Staredown fight",
     "Začít attack, počkat na security, pokračovat",
@@ -24,7 +26,7 @@ const POOLS = {
     "Důkazní materiál na mobilu",
     "Moderátor to ztratil",
     "Svlékání trika u stolu",
-    "Zaplať mi víc!",
+    "Hozený předmět",
     "Dáme lokty a kolena?",
     "Zmínka o nejhorším zápase",
     "Napodobení soupeře",
@@ -33,6 +35,16 @@ const POOLS = {
     "Přijde Kaluba",
     "Parodie na OSS",
     "Soupeři si dají nechtěnou pusu na čelo",
+    "Zápasník začne ironicky tleskat soupeři",
+    "Dojde na obviňování z dopingu",
+    "Padne řeč o penězích",
+    "„Já tě naučím respektu!“",
+    "Někdo si stoupne na židli",
+    "Random výbuch emocí -> attack",
+    "Někdo to vezme přes nebo pod stůl",
+    "Lesy se značně směje",
+    "„Můžu jenom...?“",
+    "Výmluva",
   ],
   tiskovka: [
     "Narušitel z publika začne řvát",
@@ -61,6 +73,10 @@ const POOLS = {
     "Po zápase si to zopakujem!",
     "Boj o mikrofon",
     "Důkazní materiál na mobilu",
+    "Někdo odmítne odpovídat na otázky",
+    "Přijde někdo „z ulice“ a začne se nabízet na fight",
+    "Padne řeč o drogách/alkoholu",
+    "Výmluva",
   ],
   vazeni: [
     "Nedoržení váhy",
@@ -68,7 +84,7 @@ const POOLS = {
     "Ochranka odděluje staredown",
     "TikTok taneček u váhy",
     "Přehnané svalové pózy",
-    "Kostým na scéně",
+    "Kostým/maska na scéně",
     "Výzva na challenge na podiu",
     "Podívej se, jak vypadáš!",
     "Zvedne soupeře v náručí",
@@ -88,8 +104,10 @@ const POOLS = {
     "Trenér se nasere víc než zápasník",
     "Lapování bez lapu",
     "Parodie na OSS",
+    "Výmluva",
+
   ],
-  galavec: [
+  galavecer: [
     "Parodie na OSS",
     "Brutální KO, publikum šílí",
     "Ring girl zastíní fightera",
@@ -99,12 +117,12 @@ const POOLS = {
     "Nevyleze na klec na první pokus při oslavě",
     "Showboating uprostřed boje",
     "Prohra protestem",
-    "Choreo ring girls",
+    "Ring girls dance",
     "Výhra na split decision",
     "Tohle bylo domluvený! z publika",
     "Ztracený chránič zubů",
     "Replay ukáže jiný zásah",
-    "V kleci se podá pivo 🍺",
+    "Oznámení nejnabitější karty v historii clashe",
     "Překvapivý rematch oznámení",
     "Děkuju rodině",
     "Kick rozhodne fight",
@@ -116,6 +134,10 @@ const POOLS = {
     "Fanoušci zpívají chorál",
     "Zápas trvá max 10 sekund",
     "Prohra na DQ kvůli blbosti",
+    "Někdo nepřijde do ringu",
+    "Odmítnutý handshake",
+    "Přijde si někdo pro fight, protože si ho zaslouží",
+    "Výmluva",
   ],
 };
 
@@ -180,7 +202,7 @@ export default function App(){
       <header className="topbar">
         <div>
           <h1 className="title">Clash Bingo Generator</h1>
-          <p className="subtitle">Vyber kategorii, vygeneruj kartu, hraj. FREE SPACE můžeš vypnout.</p>
+          <p className="subtitle">Vyber kategorii, vygeneruj kartu, hraj, žolíka můžeš vypnout.</p>
         </div>
         <div className="actions">
           <button className="btn ghost" onClick={()=>{
@@ -205,7 +227,7 @@ export default function App(){
             </select>
           </div>
           <div className="control">
-            <label><input type="checkbox" checked={freeSpace} onChange={onToggleFree}/> FREE SPACE uprostřed</label>
+            <label><input type="checkbox" checked={freeSpace} onChange={onToggleFree}/> ŽOLÍK uprostřed</label>
           </div>
           <button className="btn" onClick={regenerate}>Generovat novou kartu</button>
         </div>
