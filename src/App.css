@@ -26,30 +26,49 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 .subtitle{margin:6px 0 0;color:var(--muted);font-size:14px}
 .actions{display:flex;gap:8px}
 
-/* tlačítka – světlý bílá, tmavý světlá */
-.btn{padding:10px 14px;border-radius:10px;cursor:pointer;border:1px solid var(--border)}
-.theme-light .btn{background:#fff;color:#0f172a}
-.theme-dark .btn{background:#e5e7eb;color:#0f172a}
-.btn:hover{opacity:.95}
-.btn.ghost{background:transparent;color:var(--text)}
+/* tlačítka – JEDNOTNÝ LOOK v obou režimech */
+.btn{
+  padding:10px 14px;
+  border-radius:10px;
+  cursor:pointer;
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  transition:background .15s ease, opacity .15s ease, border-color .15s ease;
+}
+.theme-light .btn:hover{ background:#f8fafc; }
+.theme-dark  .btn:hover{ background:#111827; }
+
+.btn.ghost{
+  background:transparent;
+  color:var(--text);
+}
+.btn.ghost:hover{
+  background:var(--card);
+}
 
 /* karty / vstupy */
 .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:12px;color:var(--text)}
 .controls .row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .control{display:flex;flex-direction:column;gap:6px}
-.control input[type="text"],.control select{
-  border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:transparent;color:var(--text)
+.control input[type="text"],
+.control select{
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 12px;
+  background:var(--card);
+  color:var(--text);
 }
 .control select option{color:#000}
 
 /* ===== CENTROVÁNÍ ===== */
-.center{max-width:1480px;margin:0 auto}        /* centralizuje controls */
+.center{max-width:1480px;margin:0 auto}
 .layout-wrapper{width:100%;display:flex;justify-content:center}
 .layout{
   display:grid;
-  grid-template-columns: auto 360px;           /* mřížka + sidebar */
+  grid-template-columns: auto 360px;
   gap:16px;
-  max-width:1480px;                            /* pevná šířka kvůli centrování */
+  max-width:1480px;
   width:100%;
   margin:12px auto 0;
 }
@@ -57,7 +76,7 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 /* mřížka – 1920×1080 bez scrollu */
 .grid-card{padding:14px}
 .grid{
-  --cell-size: 170px;                          /* klíčová hodnota pro FullHD */
+  --cell-size: 170px;
   display:grid;
   grid-template-columns: repeat(5, var(--cell-size));
   gap:12px;
