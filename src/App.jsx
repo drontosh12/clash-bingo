@@ -189,6 +189,8 @@ function formatDuration(ms) {
   return `${pad(m)}:${pad(s)}`;
 }
 
+const API_URL = "/.netlify/functions/winners";
+
 export default function App() {
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [freeSpace, setFreeSpace] = useState(true);
@@ -198,45 +200,26 @@ export default function App() {
   const [winners, setWinners] = useState([]); // {nick,time,duration,category}
   const [bingoBanner, setBingoBanner] = useState(false);
   const [startAt, setStartAt] = useState(Date.now()); // kdy se začalo hrát / resetovalo
-
   const bingoCount = useMemo(() => linesCompleted(board), [board]);
 
-  // ===== PERSISTENCE: načtení výher ze storage a denní reset =====
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const lastDay = localStorage.getItem("winnersDate");
-    const saved = localStorage.getItem("winnersToday");
-
-    if (lastDay === today && saved) {
-      try {
-        setWinners(JSON.parse(saved));
-      } catch {
-        setWinners([]);
-      }
-    } else {
-      localStorage.setItem("winnersDate", today);
-      localStorage.removeItem("winnersToday");
-      setWinners([]);
+  // === Načtení dnešních výher ze serveru (a lehký polling)
+  const fetchWinners = async () => {
+    try {
+      const res = await fetch(API_URL, { method: "GET" });
+      const data = await res.json();
+      // server může vracet buď přímo pole, nebo { winners: [...] }
+      const list = Array.isArray(data) ? data : data.winners || [];
+      setWinners(list);
+    } catch {
+      // když backend spadne, UI prostě neupdatujeme
     }
+  };
 
-    const checkMidnight = setInterval(() => {
-      const nowDay = new Date().toISOString().slice(0, 10);
-      if (nowDay !== localStorage.getItem("winnersDate")) {
-        localStorage.setItem("winnersDate", nowDay);
-        localStorage.removeItem("winnersToday");
-        setWinners([]);
-      }
-    }, 30000);
-
-    return () => clearInterval(checkMidnight);
-  }, []);
-
-  // ===== PERSISTENCE: ukládání výher při každé změně =====
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    localStorage.setItem("winnersDate", today);
-    localStorage.setItem("winnersToday", JSON.stringify(winners));
-  }, [winners]);
+    fetchWinners();
+    const t = setInterval(fetchWinners, 15000); // každých 15 s osvěžit
+    return () => clearInterval(t);
+  }, []);
 
   // Auto skrytí banneru
   useEffect(() => {
@@ -252,6 +235,20 @@ export default function App() {
     setStartAt(Date.now()); // nový start – od vygenerování
   };
 
+  const postWinner = async (payload) => {
+    try {
+      await fetch(API_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      // po uložení hned přenačíst žebříček
+      fetchWinners();
+    } catch {
+      // ignoruj – čistě klientská hra poběží dál
+    }
+  };
+
   const toggleCell = (i) => {
     const next = [...board];
     if (i === 12 && next[12]?.center) return;
@@ -261,8 +258,10 @@ export default function App() {
       const finishedAt = new Date();
       const time = finishedAt.toLocaleTimeString();
       const duration = formatDuration(finishedAt.getTime() - startAt);
-      setWinners((w) => [...w, { nick: nick || "Anon", time, duration, category }]);
+      const entry = { nick: nick || "Anon", time, duration, category };
       setBingoBanner(true);
+      // pošli na server
+      postWinner(entry);
     }
   };
 
@@ -402,7 +401,7 @@ export default function App() {
               </button>
             </div>
 
-            <h4 className="mt">Výhry</h4>
+            <h4 className="mt">Výhry (TOP 300 dnes)</h4>
             {winners.length === 0 ? (
               <p className="muted">Zatím žádný záznam.</p>
             ) : (
