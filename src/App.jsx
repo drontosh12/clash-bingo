@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-// === POOLY (tvoje) ===
+// === POOLY ===
 const POOLS = {
   b4: [
     "Tohle je showbusiness!",
@@ -176,12 +176,10 @@ function linesCompleted(cells) {
   if ([4, 8, 12, 16, 20].every((i) => cells[i].checked)) c++;
   return c;
 }
-function hasAnyBingo(cells) {
-  return linesCompleted(cells) > 0;
-}
-function pad(n) {
-  return n.toString().padStart(2, "0");
-}
+const hasAnyBingo = (cells) => linesCompleted(cells) > 0;
+const isBoardFull  = (cells) => cells.every((c) => c.checked);
+
+const pad = (n) => n.toString().padStart(2, "0");
 function formatDuration(ms) {
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
@@ -189,37 +187,59 @@ function formatDuration(ms) {
   return `${pad(m)}:${pad(s)}`;
 }
 
-const API_URL = "/.netlify/functions/winners";
-
 export default function App() {
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [freeSpace, setFreeSpace] = useState(true);
   const [dark, setDark] = useState(true);
+
   const [board, setBoard] = useState(() => makeBoard(POOLS[DEFAULT_CATEGORY], true));
+
   const [nick, setNick] = useState("");
   const [winners, setWinners] = useState([]); // {nick,time,duration,category}
   const [bingoBanner, setBingoBanner] = useState(false);
-  const [startAt, setStartAt] = useState(Date.now()); // kdy se začalo hrát / resetovalo
+  const [bannerType, setBannerType] = useState("bingo"); // 'bingo' | 'ultra'
+  const [startAt, setStartAt] = useState(Date.now());
+
+  // jednorázové spouštění
+  const [hasBingo, setHasBingo] = useState(false);
+  const [hasUltra, setHasUltra] = useState(false);
+
   const bingoCount = useMemo(() => linesCompleted(board), [board]);
 
-  // === Načtení dnešních výher ze serveru (a lehký polling)
-  const fetchWinners = async () => {
-    try {
-      const res = await fetch(API_URL, { method: "GET" });
-      const data = await res.json();
-      // server může vracet buď přímo pole, nebo { winners: [...] }
-      const list = Array.isArray(data) ? data : data.winners || [];
-      setWinners(list);
-    } catch {
-      // když backend spadne, UI prostě neupdatujeme
-    }
-  };
-
+  // načtení výher z localStorage + denní reset
   useEffect(() => {
-    fetchWinners();
-    const t = setInterval(fetchWinners, 15000); // každých 15 s osvěžit
+    const today = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem("winnersDate");
+    const saved = localStorage.getItem("winnersData");
+
+    if (last === today && saved) {
+      try {
+        setWinners(JSON.parse(saved));
+      } catch {
+        setWinners([]);
+      }
+    } else {
+      setWinners([]);
+      localStorage.setItem("winnersDate", today);
+      localStorage.removeItem("winnersData");
+    }
+
+    const t = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10);
+      if (now !== localStorage.getItem("winnersDate")) {
+        setWinners([]);
+        localStorage.setItem("winnersDate", now);
+        localStorage.removeItem("winnersData");
+      }
+    }, 30000);
+
     return () => clearInterval(t);
   }, []);
+
+  // persist výher
+  useEffect(() => {
+    localStorage.setItem("winnersData", JSON.stringify(winners));
+  }, [winners]);
 
   // Auto skrytí banneru
   useEffect(() => {
@@ -232,36 +252,43 @@ export default function App() {
   const regenerate = () => {
     const pool = POOLS[category] || POOLS[DEFAULT_CATEGORY];
     setBoard(makeBoard(pool, freeSpace));
-    setStartAt(Date.now()); // nový start – od vygenerování
+    setStartAt(Date.now());
+    setHasBingo(false);
+    setHasUltra(false);
   };
 
-  const postWinner = async (payload) => {
-    try {
-      await fetch(API_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      // po uložení hned přenačíst žebříček
-      fetchWinners();
-    } catch {
-      // ignoruj – čistě klientská hra poběží dál
-    }
+  const tryRecord = (type /* 'bingo' | 'ultra' */) => {
+    const finishedAt = new Date();
+    const time = finishedAt.toLocaleTimeString();
+    const duration = formatDuration(finishedAt.getTime() - startAt);
+    const catLabel = type === "ultra" ? `${category} + ULTRA` : category;
+
+    setWinners((w) => [...w, { nick: nick || "Anon", time, duration, category: catLabel }]);
+    setBannerType(type);
+    setBingoBanner(true);
   };
 
   const toggleCell = (i) => {
     const next = [...board];
+    // žolík uprostřed je z výroby zaškrtnutý a nelze vypnout
     if (i === 12 && next[12]?.center) return;
+
     next[i] = { ...next[i], checked: !next[i].checked };
     setBoard(next);
-    if (!bingoBanner && hasAnyBingo(next)) {
-      const finishedAt = new Date();
-      const time = finishedAt.toLocaleTimeString();
-      const duration = formatDuration(finishedAt.getTime() - startAt);
-      const entry = { nick: nick || "Anon", time, duration, category };
-      setBingoBanner(true);
-      // pošli na server
-      postWinner(entry);
+
+    // 1) ULTRA BINGO: celá karta hotová – vyvolat jen jednou
+    if (!hasUltra && isBoardFull(next)) {
+      tryRecord("ultra");
+      setHasUltra(true);
+      if (!hasBingo) setHasBingo(true); // implicitně už je aspoň 1 řada
+      return;
+    }
+
+    // 2) První BINGO: aspoň jedna řada/sloupec/úhlopříčka – vyvolat jen jednou
+    if (!hasBingo && hasAnyBingo(next)) {
+      tryRecord("bingo");
+      setHasBingo(true);
+      return;
     }
   };
 
@@ -269,23 +296,29 @@ export default function App() {
     const v = e.target.value;
     setCategory(v);
     setBoard(makeBoard(POOLS[v], freeSpace));
-    setStartAt(Date.now()); // přepnutí kategorie = nový start
+    setStartAt(Date.now());
+    setHasBingo(false);
+    setHasUltra(false);
   };
 
   const onToggleFree = (e) => {
     const v = e.target.checked;
     setFreeSpace(v);
     setBoard(makeBoard(POOLS[category], v));
-    setStartAt(Date.now()); // změna žolíka = nový start
+    setStartAt(Date.now());
+    setHasBingo(false);
+    setHasUltra(false);
   };
 
-  // Reset = jen odškrtnout, nepřelosovat + resetnout měření času
+  // Reset = odškrtnout + reset měření + zrušit příznaky
   const resetGame = () => {
     setBoard((prev) =>
       prev.map((c, idx) => (idx === 12 && c.center ? c : { ...c, checked: false }))
     );
     setBingoBanner(false);
     setStartAt(Date.now());
+    setHasBingo(false);
+    setHasUltra(false);
   };
 
   const grid = useMemo(
@@ -421,7 +454,9 @@ export default function App() {
       {bingoBanner && (
         <div className="bingo-banner">
           <div className="bingo-content">
-            <div className="bingo-title">BINGO!</div>
+            <div className="bingo-title">
+              {bannerType === "ultra" ? "ULTRA BINGO!" : "BINGO!"}
+            </div>
             <div className="bingo-sub">Zapsáno do výher vpravo</div>
           </div>
         </div>
