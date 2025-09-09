@@ -61,6 +61,34 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 }
 .control select option{color:#000}
 
+/* ===== select dark mode fix ===== */
+.theme-dark .control select { color: var(--text); background: var(--card); border-color: var(--border); }
+.theme-dark .control select option { color: #e5e7eb; background: #0f172a; }
+.theme-dark .control select option:checked,
+.theme-dark .control select option:hover { color:#ffffff; background:#111827; }
+
+/* ===== roombar (ovládání roomky) ===== */
+.roombar{
+  display:flex;
+  gap:8px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card);
+  align-items:center;
+  margin-left:12px;
+}
+.roombar .room-input{
+  width:120px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 12px;
+  background:var(--card);
+  color:var(--text);
+  outline:none;
+}
+.roombar .room-input::placeholder{ color:var(--muted); }
+
 /* ===== CENTROVÁNÍ ===== */
 .center{max-width:1480px;margin:0 auto}
 .layout-wrapper{width:100%;display:flex;justify-content:center}
@@ -105,6 +133,12 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 .cell-text{color:var(--text);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;padding:0 6px}
 
 /* pravý panel */
+.sidebar{
+  max-height: calc(100vh - 120px); /* jen sidebar scrolluje, ne celá stránka */
+  overflow-y: auto;
+  position: sticky;
+  top: 12px;
+}
 .sidebar h3{margin:0 0 8px}
 .stat{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:transparent;border:1px solid var(--border);border-radius:12px}
 .stat strong{font-size:20px}
@@ -120,6 +154,7 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 .bingo-title{font-size:34px;font-weight:900;color:var(--accent)}
 .bingo-sub{margin-top:6px;color:var(--muted)}
 
+/* patička */
 .footer{margin:12px 0 6px;text-align:center;color:var(--muted);font-size:12px}
 
 /* responzivní fallbacky */
@@ -128,4 +163,6 @@ body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-ser
 @media (max-width: 1100px){
   .layout{ grid-template-columns: 1fr; }
   .grid{ --cell-size: 130px; }
+  .roombar{ width:100%; margin-left:0; }
+  .sidebar{ max-height: none; position: static; } /* na úzké šířce se přizpůsob */
 }

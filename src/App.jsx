@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
-// === POOLY ===
+/* ===== POOLY ===== */
 const POOLS = {
   b4: [
     "Tohle je showbusiness!",
@@ -139,10 +139,9 @@ const POOLS = {
     "Výmluva",
   ],
 };
-
 const DEFAULT_CATEGORY = "b4";
 
-// utils
+/* ===== Utils ===== */
 function shuffle(a) {
   const arr = [...a];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -177,8 +176,7 @@ function linesCompleted(cells) {
   return c;
 }
 const hasAnyBingo = (cells) => linesCompleted(cells) > 0;
-const isBoardFull  = (cells) => cells.every((c) => c.checked);
-
+const isBoardFull = (cells) => cells.every((c) => c.checked);
 const pad = (n) => n.toString().padStart(2, "0");
 function formatDuration(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -186,6 +184,30 @@ function formatDuration(ms) {
   const s = totalSec % 60;
   return `${pad(m)}:${pad(s)}`;
 }
+
+/* ===== Local leaderboard ===== */
+const LS_KEY_DATA = "winnersData";
+const LS_KEY_DATE = "winnersDate";
+function readWinnersFromLS() {
+  const today = new Date().toISOString().slice(0, 10);
+  const last = localStorage.getItem(LS_KEY_DATE);
+  const saved = localStorage.getItem(LS_KEY_DATA);
+  if (last === today && saved) {
+    try { return JSON.parse(saved) ?? []; } catch { return []; }
+  }
+  localStorage.setItem(LS_KEY_DATE, today);
+  localStorage.removeItem(LS_KEY_DATA);
+  return [];
+}
+function writeWinnersToLS(winners) {
+  localStorage.setItem(LS_KEY_DATA, JSON.stringify(winners));
+}
+
+/* ===== Rooms (lokálně + mezi taby) ===== */
+function genRoomCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+const ROOM_CH = "clash-bingo-room";
 
 export default function App() {
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
@@ -195,59 +217,101 @@ export default function App() {
   const [board, setBoard] = useState(() => makeBoard(POOLS[DEFAULT_CATEGORY], true));
 
   const [nick, setNick] = useState("");
-  const [winners, setWinners] = useState([]); // {nick,time,duration,category}
+  const [winners, setWinners] = useState([]);
   const [bingoBanner, setBingoBanner] = useState(false);
-  const [bannerType, setBannerType] = useState("bingo"); // 'bingo' | 'ultra'
+  const [bannerType, setBannerType] = useState("bingo");
+  const [warnBanner, setWarnBanner] = useState(false);
   const [startAt, setStartAt] = useState(Date.now());
 
-  // jednorázové spouštění
   const [hasBingo, setHasBingo] = useState(false);
   const [hasUltra, setHasUltra] = useState(false);
 
+  const [roomCode, setRoomCode] = useState(() => new URLSearchParams(location.search).get("room") || "");
+  const [players, setPlayers] = useState([]); // {id,nick,joinedAt}
+  const myIdRef = useRef(`${crypto.getRandomValues(new Uint32Array(1))[0].toString(16)}-${Date.now()}`);
+  const bcRef = useRef(null);
+
+  const clickGuard = useRef(0);
   const bingoCount = useMemo(() => linesCompleted(board), [board]);
 
-  // načtení výher z localStorage + denní reset
+  /* ===== Leaderboard load / daily reset ===== */
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const last = localStorage.getItem("winnersDate");
-    const saved = localStorage.getItem("winnersData");
+    const local = readWinnersFromLS();
+    setWinners(limitAndSort(local));
 
-    if (last === today && saved) {
-      try {
-        setWinners(JSON.parse(saved));
-      } catch {
+    const tick = setInterval(() => {
+      const today = new Date().toISOString().slice(0, 10);
+      const last = localStorage.getItem(LS_KEY_DATE);
+      if (last && last !== today) {
+        localStorage.setItem(LS_KEY_DATE, today);
+        localStorage.removeItem(LS_KEY_DATA);
         setWinners([]);
       }
-    } else {
-      setWinners([]);
-      localStorage.setItem("winnersDate", today);
-      localStorage.removeItem("winnersData");
-    }
-
-    const t = setInterval(() => {
-      const now = new Date().toISOString().slice(0, 10);
-      if (now !== localStorage.getItem("winnersDate")) {
-        setWinners([]);
-        localStorage.setItem("winnersDate", now);
-        localStorage.removeItem("winnersData");
-      }
-    }, 30000);
-
-    return () => clearInterval(t);
+    }, 30_000);
+    return () => clearInterval(tick);
   }, []);
+  function limitAndSort(arr) {
+    const toSec = (dur) => {
+      if (!dur || typeof dur !== "string" || !dur.includes(":")) return Infinity;
+      const [m, s] = dur.split(":").map((x) => parseInt(x, 10));
+      return (isNaN(m) ? 0 : m) * 60 + (isNaN(s) ? 0 : s);
+    };
+    return [...arr].sort((a, b) => toSec(a.duration) - toSec(b.duration)).slice(0, 300);
+  }
 
-  // persist výher
-  useEffect(() => {
-    localStorage.setItem("winnersData", JSON.stringify(winners));
-  }, [winners]);
+  // auto-hide bannery
+  useEffect(() => { if (bingoBanner) { const t = setTimeout(() => setBingoBanner(false), 2000); return () => clearTimeout(t);} }, [bingoBanner]);
+  useEffect(() => { if (warnBanner) { const t = setTimeout(() => setWarnBanner(false), 2000); return () => clearTimeout(t);} }, [warnBanner]);
 
-  // Auto skrytí banneru
+  /* ===== Rooms: BroadcastChannel mezi taby ===== */
   useEffect(() => {
-    if (bingoBanner) {
-      const t = setTimeout(() => setBingoBanner(false), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [bingoBanner]);
+    if (!("BroadcastChannel" in window)) return;
+    bcRef.current = new BroadcastChannel(ROOM_CH);
+    bcRef.current.onmessage = (ev) => {
+      const { type, payload } = ev.data || {};
+      if (type === "room:state" && payload?.room === roomCode) {
+        setPlayers(payload.players || []);
+      }
+      if (type === "room:ping" && payload?.room === roomCode) {
+        broadcastState(roomCode, players);
+      }
+    };
+    return () => { try { bcRef.current?.close(); } catch {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, players]);
+
+  function broadcastState(code, list) {
+    try {
+      bcRef.current?.postMessage({ type: "room:state", payload: { room: code, players: list } });
+    } catch {}
+  }
+
+  function updateURLWithRoom(code) {
+    const url = new URL(location.href);
+    url.searchParams.set("room", code);
+    history.replaceState({}, "", url.toString());
+  }
+
+  function ensureMeInPlayers(code) {
+    const me = { id: myIdRef.current, nick: (nick || "Anon").trim() || "Anon", joinedAt: new Date().toISOString() };
+    setPlayers((prev) => {
+      const exists = prev.some((p) => p.id === me.id);
+      const next = exists ? prev.map((p) => (p.id === me.id ? { ...p, nick: me.nick } : p)) : [...prev, me];
+      sessionStorage.setItem(`room:${code}:players`, JSON.stringify(next));
+      broadcastState(code, next);
+      return next;
+    });
+  }
+
+  // při změně roomky: načti lokální stav + pingni ostatní tabe
+  useEffect(() => {
+    if (!roomCode) return;
+    const s = sessionStorage.getItem(`room:${roomCode}:players`);
+    const base = s ? JSON.parse(s) : [];
+    setPlayers(base);
+    try { bcRef.current?.postMessage({ type: "room:ping", payload: { room: roomCode } }); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
 
   const regenerate = () => {
     const pool = POOLS[category] || POOLS[DEFAULT_CATEGORY];
@@ -257,34 +321,43 @@ export default function App() {
     setHasUltra(false);
   };
 
-  const tryRecord = (type /* 'bingo' | 'ultra' */) => {
+  const tryRecord = (type) => {
     const finishedAt = new Date();
     const time = finishedAt.toLocaleTimeString();
     const duration = formatDuration(finishedAt.getTime() - startAt);
     const catLabel = type === "ultra" ? `${category} + ULTRA` : category;
-
-    setWinners((w) => [...w, { nick: nick || "Anon", time, duration, category: catLabel }]);
-    setBannerType(type);
+    const record = { nick: nick || "Anon", time, duration, category: catLabel, createdAt: finishedAt.toISOString() };
     setBingoBanner(true);
+    setBannerType(type);
+    setWinners((prev) => {
+      const next = limitAndSort([...prev, record]);
+      writeWinnersToLS(next);
+      return next;
+    });
   };
 
   const toggleCell = (i) => {
+    const now = Date.now();
+    if (now - clickGuard.current < 250) return;
+    clickGuard.current = now;
+
+    if (!nick.trim() && !(i === 12 && board[12]?.center)) {
+      setWarnBanner(true);
+      return;
+    }
+
     const next = [...board];
-    // žolík uprostřed je z výroby zaškrtnutý a nelze vypnout
     if (i === 12 && next[12]?.center) return;
 
     next[i] = { ...next[i], checked: !next[i].checked };
     setBoard(next);
 
-    // 1) ULTRA BINGO: celá karta hotová – vyvolat jen jednou
     if (!hasUltra && isBoardFull(next)) {
       tryRecord("ultra");
       setHasUltra(true);
-      if (!hasBingo) setHasBingo(true); // implicitně už je aspoň 1 řada
+      if (!hasBingo) setHasBingo(true);
       return;
     }
-
-    // 2) První BINGO: aspoň jedna řada/sloupec/úhlopříčka – vyvolat jen jednou
     if (!hasBingo && hasAnyBingo(next)) {
       tryRecord("bingo");
       setHasBingo(true);
@@ -300,7 +373,6 @@ export default function App() {
     setHasBingo(false);
     setHasUltra(false);
   };
-
   const onToggleFree = (e) => {
     const v = e.target.checked;
     setFreeSpace(v);
@@ -309,22 +381,53 @@ export default function App() {
     setHasBingo(false);
     setHasUltra(false);
   };
-
-  // Reset = odškrtnout + reset měření + zrušit příznaky
   const resetGame = () => {
-    setBoard((prev) =>
-      prev.map((c, idx) => (idx === 12 && c.center ? c : { ...c, checked: false }))
-    );
+    setBoard((prev) => prev.map((c, idx) => (idx === 12 && c.center ? c : { ...c, checked: false })));
     setBingoBanner(false);
+    setWarnBanner(false);
     setStartAt(Date.now());
     setHasBingo(false);
     setHasUltra(false);
   };
 
-  const grid = useMemo(
-    () => Array.from({ length: 5 }, (_, r) => board.slice(r * 5, r * 5 + 5)),
-    [board]
-  );
+  // === ROOM UI handlers ===
+  const onGenerateRoom = async () => {
+    const code = genRoomCode();
+    setRoomCode(code);
+    updateURLWithRoom(code);
+    ensureMeInPlayers(code);
+
+    const shareUrl = `${location.origin}${location.pathname}?room=${code}`;
+    try { await navigator.clipboard.writeText(shareUrl); } catch {}
+    // žádný alert — číslo je vidět v poli a v URL
+  };
+
+  const onJoinRoom = () => {
+    if (!roomCode.trim()) return;
+    updateURLWithRoom(roomCode.trim());
+    ensureMeInPlayers(roomCode.trim());
+  };
+
+  const goToGlobalRoom = () => {
+    const code = "0";
+    setRoomCode(code);
+    updateURLWithRoom(code);
+    ensureMeInPlayers(code);
+  };
+
+  // když se změní nick a jsme v roomce -> aktualizace v seznamu
+  useEffect(() => {
+    if (!roomCode) return;
+    setPlayers((prev) => {
+      const next = prev.map((p) => (p.id === myIdRef.current ? { ...p, nick: (nick || "Anon").trim() || "Anon" } : p));
+      sessionStorage.setItem(`room:${roomCode}:players`, JSON.stringify(next));
+      try { bcRef.current?.postMessage({ type: "room:state", payload: { room: roomCode, players: next } }); } catch {}
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nick]);
+
+  const grid = useMemo(() => Array.from({ length: 5 }, (_, r) => board.slice(r * 5, r * 5 + 5)), [board]);
 
   return (
     <div className={`page ${dark ? "theme-dark" : "theme-light"}`}>
@@ -337,22 +440,15 @@ export default function App() {
             className="btn"
             onClick={() => {
               const rows = Array.from({ length: 5 }, (_, r) =>
-                board
-                  .slice(r * 5, r * 5 + 5)
-                  .map((c) => (c.checked ? "[x] " : "[ ] ") + c.text)
-                  .join(" | ")
+                board.slice(r * 5, r * 5 + 5).map((c) => (c.checked ? "[x] " : "[ ] ") + c.text).join(" | ")
               ).join("\n");
               navigator.clipboard.writeText(rows);
             }}
           >
             Kopírovat
           </button>
-          <button className="btn" onClick={() => window.print()}>
-            Tisk
-          </button>
-          <button className="btn" onClick={() => setDark((d) => !d)}>
-            {dark ? "Světlý režim" : "Tmavý režim"}
-          </button>
+          <button className="btn" onClick={() => window.print()}>Tisk</button>
+          <button className="btn" onClick={() => setDark((d) => !d)}>{dark ? "Světlý režim" : "Tmavý režim"}</button>
         </div>
       </header>
 
@@ -370,25 +466,28 @@ export default function App() {
           </div>
 
           <div className="control">
-            <label>
-              <input type="checkbox" checked={freeSpace} onChange={onToggleFree} /> ŽOLÍK
-              uprostřed
-            </label>
+            <label><input type="checkbox" checked={freeSpace} onChange={onToggleFree} /> ŽOLÍK uprostřed</label>
           </div>
 
-          <button className="btn" onClick={regenerate}>
-            Generovat novou kartu
-          </button>
+          <button className="btn" onClick={regenerate}>Generovat novou kartu</button>
+
+          {/* === ROOM BAR === */}
+          <div className="roombar">
+            <button className="btn" onClick={onGenerateRoom}>Vygenerovat roomku</button>
+            <input
+              className="room-input"
+              placeholder="Kód roomky"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+            <button className="btn" onClick={onJoinRoom}>Připojit</button>
+            <button className="btn ghost" onClick={goToGlobalRoom}>Globální roomka</button>
+          </div>
 
           {/* Nick doprava */}
           <div className="control" style={{ marginLeft: "auto", minWidth: 220 }}>
             <label>Tvůj nick</label>
-            <input
-              type="text"
-              placeholder="Nick"
-              value={nick}
-              onChange={(e) => setNick(e.target.value)}
-            />
+            <input type="text" placeholder="Nick" value={nick} onChange={(e) => setNick(e.target.value)} />
           </div>
         </div>
       </div>
@@ -405,9 +504,7 @@ export default function App() {
                   return (
                     <button
                       key={cell.id}
-                      className={`cell ${cell.checked ? "checked" : ""} ${
-                        isCenter ? "center" : ""
-                      }`}
+                      className={`cell ${cell.checked ? "checked" : ""} ${isCenter ? "center" : ""}`}
                       onClick={() => toggleCell(i)}
                       disabled={isCenter}
                       title={cell.text}
@@ -429,11 +526,10 @@ export default function App() {
             </div>
 
             <div className="buttons" style={{ marginTop: 12 }}>
-              <button className="btn" onClick={resetGame}>
-                Reset
-              </button>
+              <button className="btn" onClick={resetGame}>Reset</button>
             </div>
 
+            {/* --- Výhry první --- */}
             <h4 className="mt">Výhry (TOP 300 dnes)</h4>
             {winners.length === 0 ? (
               <p className="muted">Zatím žádný záznam.</p>
@@ -447,24 +543,50 @@ export default function App() {
                 ))}
               </ul>
             )}
+
+            {/* --- Hráči až pod výhrami --- */}
+            <h4 className="mt">
+              Hráči v {roomCode === "0" ? "Globální roomce" : roomCode ? `roomce #${roomCode}` : "roomce"}
+            </h4>
+            {roomCode ? (
+              players.length === 0 ? <p className="muted">Zatím nikdo…</p> : (
+                <ul className="winners">
+                  {players.map((p) => (
+                    <li key={p.id}>
+                      <b>{p.nick}</b>
+                      <span className="pill">{new Date(p.joinedAt).toLocaleTimeString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : (
+              <p className="muted">Nejsi v žádné roomce.</p>
+            )}
           </aside>
         </div>
       </div>
 
+      {/* GREEN banners */}
       {bingoBanner && (
         <div className="bingo-banner">
           <div className="bingo-content">
-            <div className="bingo-title">
-              {bannerType === "ultra" ? "ULTRA BINGO!" : "BINGO!"}
-            </div>
+            <div className="bingo-title">{bannerType === "ultra" ? "ULTRA BINGO!" : "BINGO!"}</div>
             <div className="bingo-sub">Zapsáno do výher vpravo</div>
           </div>
         </div>
       )}
 
-      <footer className="footer">
-        © {new Date().getFullYear()} Clash Bingo • Fan projekt (neoficiální)
-      </footer>
+      {/* RED banner */}
+      {warnBanner && (
+        <div className="bingo-banner">
+          <div className="bingo-content warn">
+            <div className="bingo-title warn">UPOZORNĚNÍ</div>
+            <div className="bingo-sub">Před začátkem hry zadej svůj nick</div>
+          </div>
+        </div>
+      )}
+
+      <footer className="footer">© {new Date().getFullYear()} Fan projekt (neoficiální)</footer>
     </div>
   );
 }
