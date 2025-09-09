@@ -179,38 +179,66 @@ function linesCompleted(cells) {
 function hasAnyBingo(cells) {
   return linesCompleted(cells) > 0;
 }
+function pad(n) {
+  return n.toString().padStart(2, "0");
+}
+function formatDuration(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${pad(m)}:${pad(s)}`;
+}
 
 export default function App() {
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const [freeSpace, setFreeSpace] = useState(true);
-  const [dark, setDark] = useState(true); // default tmavý
+  const [dark, setDark] = useState(true);
   const [board, setBoard] = useState(() => makeBoard(POOLS[DEFAULT_CATEGORY], true));
   const [nick, setNick] = useState("");
-  const [winners, setWinners] = useState([]); // {nick,time,category}
+  const [winners, setWinners] = useState([]); // {nick,time,duration,category}
   const [bingoBanner, setBingoBanner] = useState(false);
+  const [startAt, setStartAt] = useState(Date.now()); // kdy se začalo hrát / resetovalo
+
   const bingoCount = useMemo(() => linesCompleted(board), [board]);
 
-  // ⬇️ RESET výher každý den o půlnoci (podle času zařízení)
+  // ===== PERSISTENCE: načtení výher ze storage a denní reset =====
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const last = localStorage.getItem("winnersDate");
+    const lastDay = localStorage.getItem("winnersDate");
+    const saved = localStorage.getItem("winnersToday");
 
-    if (last !== today) {
-      setWinners([]);
+    if (lastDay === today && saved) {
+      try {
+        setWinners(JSON.parse(saved));
+      } catch {
+        setWinners([]);
+      }
+    } else {
       localStorage.setItem("winnersDate", today);
+      localStorage.removeItem("winnersToday");
+      setWinners([]);
     }
 
     const checkMidnight = setInterval(() => {
-      const now = new Date().toISOString().slice(0, 10);
-      if (now !== localStorage.getItem("winnersDate")) {
+      const nowDay = new Date().toISOString().slice(0, 10);
+      if (nowDay !== localStorage.getItem("winnersDate")) {
+        localStorage.setItem("winnersDate", nowDay);
+        localStorage.removeItem("winnersToday");
         setWinners([]);
-        localStorage.setItem("winnersDate", now);
       }
-    }, 30000); // 30s
+    }, 30000);
 
     return () => clearInterval(checkMidnight);
   }, []);
 
+  // ===== PERSISTENCE: ukládání výher při každé změně =====
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem("winnersDate", today);
+    localStorage.setItem("winnersToday", JSON.stringify(winners));
+  }, [winners]);
+
+  // Auto skrytí banneru
   useEffect(() => {
     if (bingoBanner) {
       const t = setTimeout(() => setBingoBanner(false), 2000);
@@ -221,35 +249,44 @@ export default function App() {
   const regenerate = () => {
     const pool = POOLS[category] || POOLS[DEFAULT_CATEGORY];
     setBoard(makeBoard(pool, freeSpace));
+    setStartAt(Date.now()); // nový start – od vygenerování
   };
+
   const toggleCell = (i) => {
     const next = [...board];
     if (i === 12 && next[12]?.center) return;
     next[i] = { ...next[i], checked: !next[i].checked };
     setBoard(next);
     if (!bingoBanner && hasAnyBingo(next)) {
-      const time = new Date().toLocaleTimeString();
-      setWinners((w) => [...w, { nick: nick || "Anon", time, category }]);
+      const finishedAt = new Date();
+      const time = finishedAt.toLocaleTimeString();
+      const duration = formatDuration(finishedAt.getTime() - startAt);
+      setWinners((w) => [...w, { nick: nick || "Anon", time, duration, category }]);
       setBingoBanner(true);
     }
   };
+
   const onChangeCategory = (e) => {
     const v = e.target.value;
     setCategory(v);
     setBoard(makeBoard(POOLS[v], freeSpace));
+    setStartAt(Date.now()); // přepnutí kategorie = nový start
   };
+
   const onToggleFree = (e) => {
     const v = e.target.checked;
     setFreeSpace(v);
     setBoard(makeBoard(POOLS[category], v));
+    setStartAt(Date.now()); // změna žolíka = nový start
   };
 
-  // Reset = jen odškrtnout, nepřelosovat
+  // Reset = jen odškrtnout, nepřelosovat + resetnout měření času
   const resetGame = () => {
     setBoard((prev) =>
       prev.map((c, idx) => (idx === 12 && c.center ? c : { ...c, checked: false }))
     );
     setBingoBanner(false);
+    setStartAt(Date.now());
   };
 
   const grid = useMemo(
@@ -265,7 +302,7 @@ export default function App() {
         </div>
         <div className="actions">
           <button
-            className="btn ghost"
+            className="btn"
             onClick={() => {
               const rows = Array.from({ length: 5 }, (_, r) =>
                 board
@@ -278,7 +315,7 @@ export default function App() {
           >
             Kopírovat
           </button>
-          <button className="btn ghost" onClick={() => window.print()}>
+          <button className="btn" onClick={() => window.print()}>
             Tisk
           </button>
           <button className="btn" onClick={() => setDark((d) => !d)}>
@@ -287,9 +324,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* Ovládání – vycentrované */}
+      {/* Ovládání */}
       <div className="controls card center">
-        <div className="row">
+        <div className="row" style={{ alignItems: "center", gap: 12 }}>
           <div className="control">
             <label>Kategorie</label>
             <select value={category} onChange={onChangeCategory}>
@@ -299,19 +336,32 @@ export default function App() {
               <option value="galavecer">Galavečer</option>
             </select>
           </div>
+
           <div className="control">
             <label>
               <input type="checkbox" checked={freeSpace} onChange={onToggleFree} /> ŽOLÍK
               uprostřed
             </label>
           </div>
+
           <button className="btn" onClick={regenerate}>
             Generovat novou kartu
           </button>
+
+          {/* Nick doprava */}
+          <div className="control" style={{ marginLeft: "auto", minWidth: 220 }}>
+            <label>Tvůj nick</label>
+            <input
+              type="text"
+              placeholder="Nick"
+              value={nick}
+              onChange={(e) => setNick(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Layout – centrovaný blok s mřížkou + sidebarem */}
+      {/* Layout */}
       <div className="layout-wrapper">
         <div className="layout">
           <div className="card grid-card">
@@ -346,17 +396,7 @@ export default function App() {
               <strong>{bingoCount}</strong>
             </div>
 
-            <div className="control" style={{ marginTop: 12 }}>
-              <label>Tvůj nick</label>
-              <input
-                type="text"
-                placeholder="Nick"
-                value={nick}
-                onChange={(e) => setNick(e.target.value)}
-              />
-            </div>
-
-            <div className="buttons">
+            <div className="buttons" style={{ marginTop: 12 }}>
               <button className="btn" onClick={resetGame}>
                 Reset
               </button>
@@ -369,7 +409,8 @@ export default function App() {
               <ul className="winners">
                 {winners.map((w, i) => (
                   <li key={i}>
-                    <b>{w.nick}</b> — {w.time} <span className="pill">{w.category}</span>
+                    <b>{w.nick}</b> — {w.time} <span className="muted">({w.duration})</span>{" "}
+                    <span className="pill">{w.category}</span>
                   </li>
                 ))}
               </ul>
