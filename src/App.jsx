@@ -190,6 +190,27 @@ export default function App() {
   const [bingoBanner, setBingoBanner] = useState(false);
   const bingoCount = useMemo(() => linesCompleted(board), [board]);
 
+  // ⬇️ RESET výher každý den o půlnoci (podle času zařízení)
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const last = localStorage.getItem("winnersDate");
+
+    if (last !== today) {
+      setWinners([]);
+      localStorage.setItem("winnersDate", today);
+    }
+
+    const checkMidnight = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10);
+      if (now !== localStorage.getItem("winnersDate")) {
+        setWinners([]);
+        localStorage.setItem("winnersDate", now);
+      }
+    }, 30000); // 30s
+
+    return () => clearInterval(checkMidnight);
+  }, []);
+
   useEffect(() => {
     if (bingoBanner) {
       const t = setTimeout(() => setBingoBanner(false), 2000);
@@ -241,7 +262,6 @@ export default function App() {
       <header className="topbar">
         <div>
           <h1 className="title">Clash Bingo Generator</h1>
-          <p className="subtitle">Vyber kategorii, vygeneruj kartu, hraj, žolíka můžeš vypnout.</p>
         </div>
         <div className="actions">
           <button
